@@ -1,0 +1,21 @@
+# Dependency update config (NFR-5). Inert until the repo has a GitHub remote.
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    groups:
+      react:
+        patterns: ["react", "react-dom", "@types/react", "@types/react-dom", "react-router"]
+      redux:
+        patterns: ["@reduxjs/toolkit", "react-redux", "@rtk-query/*"]
+      lint:
+        patterns: ["eslint", "@eslint/*", "typescript-eslint", "eslint-plugin-*", "eslint-import-resolver-*"]
+      test:
+        patterns: ["vitest", "msw", "@playwright/test", "@axe-core/*", "@testing-library/*", "jsdom"]
+    ignore:
+      # TypeScript stays on 6.0.x until typescript-eslint supports TS 7 (Stack table).
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
