@@ -51,6 +51,18 @@ First-time Playwright setup: `npx playwright install chromium webkit`.
 - Every server call goes through RTK Query (`src/shared/api/base-api.ts`: `credentials: 'include'`, `X-XSRF-TOKEN` on
   unsafe verbs).
 
+## Theme and CSP (AD-23)
+
+- Light / Dark / System is stored in `localStorage['eventhub-theme']` (`light` | `dark` | `system`; anything else or
+  blocked storage means `system`). An inline script in `index.html` applies it before first paint; keep it inline,
+  tiny and import-free (rules mirror `src/shared/theme/theme-storage.ts`).
+- `npm run build` writes `dist/csp-hashes.json` (`{ "script-src": ["'sha256-…'"] }`) with the hash of that inline
+  script. The static host / reverse proxy must send `script-src 'self' <that hash>` in its CSP; re-read the file
+  after every build, since any edit to the script changes the hash.
+- Fonts (Inter, Nunito Sans) are self-hosted via `@fontsource`; the body font is preloaded. No font or script CDN.
+- Colours come only from `src/styles/tokens.css`; `tests/no-raw-colors.test.ts` and `tests/token-contrast.test.ts`
+  fail `npm test` (and so `npm run ci`) on raw colours or contrast regressions.
+
 ## Layout (AD-2)
 
 | Path | Holds |
@@ -59,7 +71,7 @@ First-time Playwright setup: `npx playwright install chromium webkit`.
 | `src/features/<feature>` | One PRD feature; other features import it only via its `index.ts` |
 | `src/shared/{ui,api,lib,auth,theme}` | shadcn UI kit, base API, helpers; never imports features or app |
 | `src/api/generated` | RTK Query endpoints + types from the OpenAPI contract |
-| `src/styles/tokens.css` | Design tokens (Nordic Fog arrives in Story 1.2) |
+| `src/styles/tokens.css` | Nordic Fog design tokens (the only file allowed to hold raw colours) |
 | `e2e/` | Playwright specs |
 
 shadcn primitives: **Radix** (`shadcn init -t vite -b radix -p nova`, CLI 4.21.0). Add components with

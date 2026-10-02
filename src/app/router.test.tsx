@@ -1,20 +1,38 @@
 import { render, screen } from "@testing-library/react"
+import { Provider } from "react-redux"
 import { createMemoryRouter, type RouteObject } from "react-router"
 import { RouterProvider } from "react-router/dom"
 import { describe, expect, it } from "vitest"
 
 import { routes } from "./router"
+import { createStore } from "./store"
 
 function renderAt(path: string) {
   const router = createMemoryRouter(routes, { initialEntries: [path] })
-  render(<RouterProvider router={router} />)
+  render(
+    <Provider store={createStore()}>
+      <RouterProvider router={router} />
+    </Provider>,
+  )
 }
 
 describe("router", () => {
-  it("lazy-loads the placeholder home route", async () => {
-    renderAt("/")
+  it("redirects / to the /login Sign in page", async () => {
+    const router = createMemoryRouter(routes, { initialEntries: ["/"] })
+    render(
+      <Provider store={createStore()}>
+        <RouterProvider router={router} />
+      </Provider>,
+    )
 
-    expect(await screen.findByRole("heading", { level: 1, name: "EventHub" })).toBeInTheDocument()
+    expect(await screen.findByRole("heading", { level: 1, name: "Sign in" })).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe("/login")
+  })
+
+  it("lazy-loads the /login Auth card from the auth feature", async () => {
+    renderAt("/login")
+
+    expect(await screen.findByRole("heading", { level: 1, name: "Sign in" })).toBeInTheDocument()
   })
 
   it("renders the not-found page for unknown paths", async () => {

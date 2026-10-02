@@ -25,7 +25,7 @@ export default defineConfig([
     },
   },
   {
-    files: ["*.{js,ts}", "scripts/**/*.mjs", "e2e/**/*.ts", "tests/**/*.ts"],
+    files: ["*.{js,ts}", "build/**/*.ts", "scripts/**/*.mjs", "e2e/**/*.ts", "tests/**/*.ts"],
     languageOptions: {
       globals: globals.node,
     },

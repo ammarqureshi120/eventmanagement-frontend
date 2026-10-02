@@ -9,7 +9,7 @@ Features: `auth`, `account`, `platform`, `organizations`, `users`, `venues`, `ev
 
 | Feature | May import (via `index.ts`) | Why |
 | --- | --- | --- |
-| _(none yet)_ | | |
+| `auth` | `theme` | The Auth card shows the icon-only `ThemeToggle` (Story 1.2). |
 
 Known planned edges (from the architecture spine, not yet built):
 

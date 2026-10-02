@@ -1,4 +1,4 @@
-import { createBrowserRouter, type RouteObject } from "react-router"
+import { createBrowserRouter, redirect, type RouteObject } from "react-router"
 
 import { RouteErrorPage } from "./routes/route-error-page"
 
@@ -13,8 +13,13 @@ export const routes: RouteObject[] = [
     errorElement: <RouteErrorPage />,
     children: [
       {
+        // Until sign-in exists (Story 1.4), the app opens on /login. Story 1.4 sends signed-in users to their role home instead.
         path: "/",
-        lazy: async () => ({ Component: (await import("./routes/home-page")).HomePage }),
+        loader: () => redirect("/login"),
+      },
+      {
+        path: "/login",
+        lazy: async () => ({ Component: (await import("@/features/auth")).LoginPage }),
       },
       {
         path: "*",

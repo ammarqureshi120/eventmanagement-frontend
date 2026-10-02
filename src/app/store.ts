@@ -1,6 +1,7 @@
 import { configureStore } from "@reduxjs/toolkit"
 import { setupListeners } from "@reduxjs/toolkit/query"
 
+import { themeReducer } from "@/features/theme"
 import { baseApi } from "@/shared/api/base-api"
 
 import "./api-enhance"
@@ -13,6 +14,7 @@ export function createStore() {
   const store = configureStore({
     reducer: {
       [baseApi.reducerPath]: baseApi.reducer,
+      theme: themeReducer,
     },
     middleware: (getDefaultMiddleware) => getDefaultMiddleware().concat(baseApi.middleware),
   })

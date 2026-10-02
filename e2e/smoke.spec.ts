@@ -15,11 +15,12 @@ async function expectNoHorizontalOverflow(page: Page) {
 }
 
 test.describe("smoke", () => {
-  test("home renders without overflow or serious a11y violations", async ({ page }) => {
+  test("/ opens the Sign in page without overflow or serious a11y violations", async ({ page }) => {
     await page.goto("/")
 
-    await expect(page.getByRole("heading", { level: 1, name: "EventHub" })).toBeVisible()
-    await expect(page).toHaveTitle("EventHub")
+    await expect(page).toHaveURL(/\/login$/)
+    await expect(page.getByRole("heading", { level: 1, name: "Sign in" })).toBeVisible()
+    await expect(page).toHaveTitle("Sign in · EventHub")
     await expectNoHorizontalOverflow(page)
     await expectNoSeriousA11yViolations(page)
   })

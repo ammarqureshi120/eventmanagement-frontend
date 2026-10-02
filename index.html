@@ -2,9 +2,17 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <!-- Story 1.2 adds the CSP-hashed no-flash theme script here (AD-23). -->
+    <!-- AD-23 / UX-DR4: no-flash theme. Runs before any stylesheet; same rules as src/shared/theme/theme-storage.ts.
+         Its SHA-256 is emitted to dist/csp-hashes.json at build time (build/theme-csp-plugin.ts). Keep it inline and import-free. -->
+    <script>
+      (function(){var d=document.documentElement,p='system';
+      try{p=localStorage.getItem('eventhub-theme')||'system'}catch(e){}
+      if(p!=='light'&&p!=='dark')p='system';
+      var dark=p==='dark'||(p==='system'&&typeof matchMedia==='function'&&matchMedia('(prefers-color-scheme: dark)').matches);
+      d.classList.toggle('dark',dark)})();
+    </script>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>EventHub</title>
   </head>
   <body>

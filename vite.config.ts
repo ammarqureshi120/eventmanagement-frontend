@@ -3,6 +3,8 @@ import tailwindcss from "@tailwindcss/vite"
 import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
 
+import { themeCspPlugin } from "./build/theme-csp-plugin.ts"
+
 /**
  * AD-3 / AD-16: the API proxy target comes from the endpoint Aspire injects via `WithReference(api)`
  * (`services__api__https__0` / `services__api__http__0`; Aspire 13.5 also injects `API_HTTPS` / `API_HTTP`).
@@ -18,7 +20,7 @@ const apiTarget =
 const port = process.env.PORT ? Number(process.env.PORT) : 5173
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), themeCspPlugin()],
   resolve: {
     alias: {
       "@": resolve(import.meta.dirname, "./src"),
