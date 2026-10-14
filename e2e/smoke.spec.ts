@@ -1,38 +1,34 @@
-import { AxeBuilder } from "@axe-core/playwright"
-import { expect, test, type Page } from "@playwright/test"
+import { expect, test } from "@playwright/test"
 
-/** UX-DR56: no serious or critical axe violations (WCAG 2.1 AA tags). */
-async function expectNoSeriousA11yViolations(page: Page) {
-  const results = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze()
-  const blocking = results.violations.filter((v) => v.impact === "serious" || v.impact === "critical")
-  expect(blocking, JSON.stringify(blocking.map((v) => ({ id: v.id, nodes: v.nodes.length })), null, 2)).toEqual([])
-}
-
-/** UX-DR58: nothing scrolls sideways. */
-async function expectNoHorizontalOverflow(page: Page) {
-  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
-  expect(overflow).toBeLessThanOrEqual(0)
-}
+import { stubApi } from "./fixtures/api-stub.ts"
+import { expectNoSeriousA11yViolations, horizontalOverflow } from "./fixtures/checks.ts"
 
 test.describe("smoke", () => {
-  test("/ opens the Sign in page without overflow or serious a11y violations", async ({ page }) => {
+  test("/ sends a signed-out visitor to Sign in without overflow or serious a11y violations", async ({ page }) => {
+    await stubApi(page)
     await page.goto("/")
 
     await expect(page).toHaveURL(/\/login$/)
     await expect(page.getByRole("heading", { level: 1, name: "Sign in" })).toBeVisible()
     await expect(page).toHaveTitle("Sign in · EventHub")
-    await expectNoHorizontalOverflow(page)
+    expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0)
     await expectNoSeriousA11yViolations(page)
   })
 
-  test("unknown route shows the not-found page with a 44px home link", async ({ page }) => {
+  test("unknown route (signed out) shows the standalone Not found page with a 44px home link", async ({ page }) => {
+    await stubApi(page)
     await page.goto("/no-such-page")
 
-    await expect(page.getByRole("heading", { level: 1, name: /couldn.t find that page/i })).toBeVisible()
+    await expect(page.getByRole("heading", { level: 2, name: "We couldn't find that" })).toBeVisible()
+    await expect(page.getByRole("heading", { level: 1, name: "Page not found" })).toBeAttached()
+    await expect(page.getByText("It may have been moved, or you may not have access to it.")).toBeVisible()
+    await expect(page).toHaveTitle("Not found · EventHub")
+    await expect(page).toHaveURL(/\/no-such-page$/)
     const link = page.getByRole("link", { name: "Go to home" })
     const box = await link.boundingBox()
     expect(box?.height ?? 0).toBeGreaterThanOrEqual(44)
-    await expectNoHorizontalOverflow(page)
+    expect(box?.width ?? 0).toBeGreaterThanOrEqual(44)
+    expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0)
     await expectNoSeriousA11yViolations(page)
   })
 })

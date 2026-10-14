@@ -11,9 +11,12 @@ import { Toaster } from "@/shared/ui/sonner"
 
 import { createRouter } from "./router"
 import { createStore } from "./store"
+import { registerUnauthorizedRedirect } from "./unauthorized-redirect"
 
 const store = createStore()
 const router = createRouter()
+const unregisterUnauthorized = registerUnauthorizedRedirect(router, store)
+import.meta.hot?.dispose(unregisterUnauthorized)
 
 /** Keeps `<html class="dark">` in sync with the theme preference (and the OS while on System). */
 function ThemeSync() {

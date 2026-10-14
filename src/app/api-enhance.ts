@@ -4,3 +4,4 @@
  * their endpoints on the shared base API.
  */
 import "@/api/generated/auth"
+import "@/api/generated/me"

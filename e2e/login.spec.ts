@@ -3,6 +3,8 @@ import { createHash } from "node:crypto"
 import { AxeBuilder } from "@axe-core/playwright"
 import { expect, test, type Page } from "@playwright/test"
 
+import { stubApi } from "./fixtures/api-stub.ts"
+
 /**
  * Story 1.2 `/login` on every DEVICE_MATRIX project (6 devices × light/dark OS scheme).
  * UX-DR4/5 no-flash + toggle, UX-DR56 axe, UX-DR58 overflow / 44px targets / 200% text / keyboard-safe focus.
@@ -59,6 +61,11 @@ function schemeOf(colorScheme: string | null | undefined): Scheme {
 }
 
 test.describe("/login", () => {
+  // Signed-out API stub: the page checks /api/me on load (vite preview has no backend).
+  test.beforeEach(async ({ page }) => {
+    await stubApi(page)
+  })
+
   test.describe("no flash: the first paint already has the stored theme (React blocked)", () => {
     for (const stored of [null, "light", "dark", "system", "blue"] as const) {
       test(`stored ${stored ?? "nothing"}`, async ({ page }, testInfo) => {
@@ -284,10 +291,14 @@ test.describe("/login", () => {
     await page.getByRole("button", { name: "Sign in" }).click()
     await expect(page.getByText("Enter an email like name@company.com.")).toBeVisible()
 
+    // Client-side errors never reach the API.
+    expect(apiCalls.filter((url) => url.includes("/api/auth/login"))).toEqual([])
+
+    // Valid input is sent (antiforgery-protected) to POST /api/auth/login.
     await email.fill("sara@example.test")
     await page.getByRole("button", { name: "Sign in" }).click()
     await expect(email).not.toHaveAttribute("aria-invalid", "true")
-    expect(apiCalls).toEqual([])
+    await expect.poll(() => apiCalls.filter((url) => url.endsWith("/api/auth/login")).length).toBe(1)
   })
 
   test("long text wraps and nothing clips at 200% text size", async ({ page }) => {

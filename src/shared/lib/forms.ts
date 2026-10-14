@@ -4,7 +4,7 @@ import type { z } from "zod"
 
 /**
  * RHF + Zod in one call (AD-2): Zod mirrors the server validator for UX only; the server stays the
- * authority and its `validation` errors are applied to fields via `shared/lib/problem` (later story).
+ * authority and its `validation` errors are applied to fields via `applyToForm` (`shared/lib/problem`).
  * Validation runs on blur, then live (UX-DR15).
  */
 export function useZodForm<TInput extends FieldValues, TOutput extends FieldValues>(

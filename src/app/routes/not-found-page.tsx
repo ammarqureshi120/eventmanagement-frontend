@@ -1,17 +1,42 @@
-import { Link } from "react-router"
+import { CompassIcon } from "lucide-react"
 
-/** Placeholder not-found page. The full system page arrives with the app shell (Story 1.4). */
-export function NotFoundPage() {
+import { useMe } from "@/shared/auth"
+
+import { AppShell } from "../shell/app-shell"
+import { AppLoading } from "./app-loading"
+import { SessionErrorPage } from "./session-error-page"
+import { SystemPage } from "./system-page"
+
+/** UX-DR11 copy (epics Story 1.4, EXPERIENCE Not found). Same page for "does not exist" and "not yours" (NFR-2). */
+export function NotFoundContent({ standalone = false }: { standalone?: boolean }) {
   return (
-    <main className="mx-auto flex min-h-dvh max-w-xl flex-col justify-center gap-3 p-4 sm:p-6">
-      <h1 className="text-2xl font-semibold">We couldn&apos;t find that page</h1>
-      <p className="text-muted-foreground">Check the address, or go back to the start.</p>
-      <Link
-        to="/"
-        className="inline-flex min-h-11 w-fit items-center rounded-lg px-1 text-primary underline underline-offset-4"
-      >
-        Go to home
-      </Link>
-    </main>
+    <SystemPage
+      standalone={standalone}
+      pageName="Page not found"
+      titleName="Not found"
+      icon={CompassIcon}
+      title="We couldn't find that"
+      description="It may have been moved, or you may not have access to it."
+    />
   )
+}
+
+/** `*`: Not found inside the app shell when signed in, standalone otherwise. */
+export function NotFoundPage() {
+  const { status, problemCode, refetch } = useMe()
+
+  if (status === "loading") {
+    return <AppLoading />
+  }
+  if (status === "error") {
+    return <SessionErrorPage problemCode={problemCode} onRetry={refetch} />
+  }
+  if (status === "signedIn") {
+    return (
+      <AppShell>
+        <NotFoundContent />
+      </AppShell>
+    )
+  }
+  return <NotFoundContent standalone />
 }
