@@ -16,7 +16,10 @@ const OPTIONS: ReadonlyArray<{ value: ThemePreference; label: string; Icon: Luci
 const ARROW_STEPS: Readonly<Record<string, 1 | -1>> = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }
 
 export interface ThemeToggleProps {
-  /** `labelled` shows the text (drawer/sidebar); `icon` is icon-only with labels kept for screen readers (auth pages). */
+  /**
+   * `labelled` shows the text (drawer/sidebar) while it fits and falls back to icons at large text sizes;
+   * `icon` is icon-only with labels kept for screen readers (auth pages, top bar).
+   */
   variant?: "labelled" | "icon"
   className?: string
 }
@@ -60,7 +63,8 @@ export function ThemeToggle({ variant = "labelled", className }: ThemeToggleProp
       data-slot="theme-toggle"
       className={cn(
         "inline-flex gap-0.5 rounded-lg bg-muted p-[3px]",
-        variant === "labelled" && "flex w-full",
+        // Labels show only while they fit (container ≥ 14rem tracks the text size); otherwise icon-only.
+        variant === "labelled" && "@container flex w-full",
         className,
       )}
     >
@@ -75,11 +79,12 @@ export function ThemeToggle({ variant = "labelled", className }: ThemeToggleProp
             "data-[state=checked]:bg-card data-[state=checked]:text-foreground data-[state=checked]:shadow-sm",
             // Ring drawn inside the (checked, card-filled) segment: ring on the muted track would be under 3:1.
             "focus-visible:outline-offset-[-2px] focus-visible:shadow-[0_0_0_3px_var(--focus-halo)] [&_svg]:size-[1.125rem] [&_svg]:shrink-0",
-            !iconOnly && "flex-1",
+            // Labelled: icon over a one-line label, so three segments fit a 264px sidebar without breaking words.
+            !iconOnly && "flex-1 flex-col gap-0.5 px-1.5 py-1.5 @min-[14rem]:text-hint",
           )}
         >
           <Icon aria-hidden="true" />
-          <span className={cn(iconOnly && "sr-only")}>{label}</span>
+          <span className={cn("sr-only", !iconOnly && "whitespace-nowrap @min-[14rem]:not-sr-only")}>{label}</span>
         </RadioGroupPrimitive.Item>
       ))}
     </RadioGroupPrimitive.Root>

@@ -1,20 +1,27 @@
 import {
   createApi,
   fetchBaseQuery,
+  type BaseQueryApi,
   type BaseQueryFn,
   type FetchArgs,
   type FetchBaseQueryError,
 } from "@reduxjs/toolkit/query/react"
 
-import { readCookie } from "@/shared/lib/cookies"
+import { toProblem } from "@/shared/lib/problem"
 
-/** Cookie issued by `GET /api/auth/antiforgery` (AD-16). */
-export const XSRF_COOKIE = "XSRF-TOKEN"
+import { notifyUnauthorized } from "./unauthorized"
+import { ensureXsrfToken, readXsrfToken, refreshXsrfToken, XSRF_COOKIE, XSRF_HEADER, XsrfTokenError } from "./xsrf"
 
-/** Header the API validates on unsafe verbs (AD-16). */
-export const XSRF_HEADER = "X-XSRF-TOKEN"
+export { XSRF_COOKIE, XSRF_HEADER }
 
 const UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"])
+
+/**
+ * Endpoints whose 401 the global handler ignores: login (wrong credentials) and logout (already gone)
+ * answer their callers, and `getMe` is handled by the route guards (`RequireAuth`, `/`), which must
+ * not race a second redirect.
+ */
+const OWN_401_ENDPOINTS = new Set(["login", "logout", "getMe"])
 
 const rawBaseQuery = fetchBaseQuery({
   // Same-origin: Vite proxies /api in dev, the reverse proxy does in prod (no CORS).
@@ -23,28 +30,81 @@ const rawBaseQuery = fetchBaseQuery({
   credentials: "include",
 })
 
+function withXsrfHeader(request: FetchArgs): FetchArgs {
+  const token = readXsrfToken()
+  if (!token) {
+    return request
+  }
+  const headers = new Headers(request.headers as HeadersInit | undefined)
+  headers.set(XSRF_HEADER, token)
+  return { ...request, headers }
+}
+
 /**
- * Sends cookies on every call and echoes the XSRF-TOKEN cookie in X-XSRF-TOKEN on POST/PUT/PATCH/DELETE.
- * ProblemDetails mapping and the 401 redirect join in later stories (AD-17).
+ * The 1.4a antiforgery filter rejects a missing or stale token with 400 `validation` and no field
+ * `errors`; real validation always names fields (spec 1.4a Decisions).
  */
-export const xsrfBaseQuery: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> = (
+function isAntiforgeryRejection(error: FetchBaseQueryError | undefined): boolean {
+  if (!error || error.status !== 400) {
+    return false
+  }
+  const problem = toProblem(error)
+  return problem.code === "validation" && Object.keys(problem.errors ?? {}).length === 0
+}
+
+/** A failed token request: its HTTP status when the server answered (→ `server_error`), else `network`. */
+function tokenError(cause: unknown): { error: FetchBaseQueryError } {
+  if (cause instanceof XsrfTokenError) {
+    return { error: { status: cause.status, data: null } }
+  }
+  return { error: { status: "FETCH_ERROR", error: cause instanceof Error ? cause.message : String(cause) } }
+}
+
+/**
+ * AD-16 / AD-17 base query:
+ * - sends cookies on every call;
+ * - on POST/PUT/PATCH/DELETE, fetches an XSRF token first when there is no cookie, echoes it in
+ *   `X-XSRF-TOKEN`, and when the antiforgery filter rejects it, refreshes the token and retries once;
+ * - on 401 `session_expired` (outside login, logout and `getMe`) tells the registered unauthorized handler.
+ * Errors stay `FetchBaseQueryError`; callers map them with `toProblem` (by `code` only).
+ */
+export const appBaseQuery: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> = async (
   args,
-  api,
+  api: BaseQueryApi,
   extraOptions,
 ) => {
   const request: FetchArgs = typeof args === "string" ? { url: args } : { ...args }
   const method = (request.method ?? "GET").toUpperCase()
+  const unsafe = UNSAFE_METHODS.has(method)
 
-  if (UNSAFE_METHODS.has(method)) {
-    const token = readCookie(XSRF_COOKIE)
-    if (token) {
-      const headers = new Headers(request.headers as HeadersInit | undefined)
-      headers.set(XSRF_HEADER, token)
-      request.headers = headers
+  if (unsafe) {
+    try {
+      await ensureXsrfToken()
+    } catch (cause) {
+      return tokenError(cause)
     }
   }
 
-  return rawBaseQuery(request, api, extraOptions)
+  let result = await rawBaseQuery(unsafe ? withXsrfHeader(request) : request, api, extraOptions)
+
+  if (unsafe && isAntiforgeryRejection(result.error)) {
+    try {
+      await refreshXsrfToken()
+    } catch (cause) {
+      return tokenError(cause)
+    }
+    result = await rawBaseQuery(withXsrfHeader(request), api, extraOptions)
+  }
+
+  if (
+    result.error?.status === 401 &&
+    !OWN_401_ENDPOINTS.has(api.endpoint) &&
+    toProblem(result.error).code === "session_expired"
+  ) {
+    notifyUnauthorized()
+  }
+
+  return result
 }
 
 /**
@@ -53,7 +113,7 @@ export const xsrfBaseQuery: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQu
  */
 export const baseApi = createApi({
   reducerPath: "api",
-  baseQuery: xsrfBaseQuery,
+  baseQuery: appBaseQuery,
   tagTypes: [],
   endpoints: () => ({}),
 })
