@@ -10,6 +10,15 @@ export async function expectNoSeriousA11yViolations(page: Page) {
   )
 }
 
+/** Stricter: no axe violations of any impact (WCAG 2.1 AA tags), for states the spec says must be clean. */
+export async function expectNoA11yViolations(page: Page) {
+  const results = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze()
+  expect(
+    results.violations,
+    JSON.stringify(results.violations.map((v) => ({ id: v.id, impact: v.impact, nodes: v.nodes.map((n) => n.target) })), null, 2),
+  ).toEqual([])
+}
+
 /** UX-DR58: nothing scrolls sideways. */
 export async function horizontalOverflow(page: Page) {
   return page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)

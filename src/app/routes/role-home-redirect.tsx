@@ -5,10 +5,12 @@ import { roleHome, useMe } from "@/shared/auth"
 import { AppShell } from "../shell/app-shell"
 import { AppLoading } from "./app-loading"
 import { NoAccessPage } from "./no-access-page"
+import { SignedOutRedirect } from "./require-auth"
 import { SessionErrorPage } from "./session-error-page"
 
 /**
- * `/`: the role home when signed in (UX-DR8), `/login` (no returnTo) when signed out. A role without a
+ * `/`: the role home when signed in (UX-DR8), `/login` (no returnTo) when signed out, with the
+ * session-ended or disabled notice when that is why (Story 1.5). A role without a
  * home route yet (until Epic 2) sees No access inside the shell instead of a dead link.
  */
 export function RoleHomeRedirect() {
@@ -26,7 +28,7 @@ export function RoleHomeRedirect() {
     )
   }
   if (status === "signedOut") {
-    return <Navigate to="/login" replace />
+    return <SignedOutRedirect problemCode={problemCode} />
   }
   if (status === "error") {
     return <SessionErrorPage problemCode={problemCode} onRetry={refetch} />

@@ -9,6 +9,7 @@ import { useThemeSync } from "@/features/theme"
 import { keepFocusedFieldInView } from "@/shared/lib/keep-focus-in-view"
 import { Toaster } from "@/shared/ui/sonner"
 
+import { registerNetworkToast } from "./network-toast"
 import { createRouter } from "./router"
 import { createStore } from "./store"
 import { registerUnauthorizedRedirect } from "./unauthorized-redirect"
@@ -17,6 +18,8 @@ const store = createStore()
 const router = createRouter()
 const unregisterUnauthorized = registerUnauthorizedRedirect(router, store)
 import.meta.hot?.dispose(unregisterUnauthorized)
+const unregisterNetworkToast = registerNetworkToast()
+import.meta.hot?.dispose(unregisterNetworkToast)
 
 /** Keeps `<html class="dark">` in sync with the theme preference (and the OS while on System). */
 function ThemeSync() {

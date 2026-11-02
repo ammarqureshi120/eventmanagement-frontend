@@ -20,6 +20,8 @@ export const STUB_ME = {
   organization: null,
   version: 1,
   navAreas: ["platform", "account"],
+  // 12-hour limit far ahead unless a test sets its own (`stubApi(page, { sessionExpiresAt })`).
+  sessionExpiresAt: "2099-01-01T00:00:00Z",
 } as const
 
 export interface ApiStub {
@@ -28,6 +30,10 @@ export interface ApiStub {
   signedIn: boolean
   /** Next logout answers with this status instead of 204 (e.g. 500). */
   failNextLogout?: number
+  /** `sessionExpiresAt` returned by `/api/me`. */
+  sessionExpiresAt: string
+  /** When set, `/api/me` answers 401 with this code (e.g. `account_disabled`) whatever `signedIn` says. */
+  meProblem?: string
 }
 
 function problemBody(status: number, code: string, errors?: Record<string, string[]>) {
@@ -38,8 +44,16 @@ function problemBody(status: number, code: string, errors?: Record<string, strin
   }
 }
 
-export async function stubApi(page: Page, options: { signedIn?: boolean } = {}): Promise<ApiStub> {
-  const stub: ApiStub = { calls: [], signedIn: options.signedIn ?? false }
+export async function stubApi(
+  page: Page,
+  options: { signedIn?: boolean; sessionExpiresAt?: string; meProblem?: string } = {},
+): Promise<ApiStub> {
+  const stub: ApiStub = {
+    calls: [],
+    signedIn: options.signedIn ?? false,
+    sessionExpiresAt: options.sessionExpiresAt ?? STUB_ME.sessionExpiresAt,
+    meProblem: options.meProblem,
+  }
   let tokenCount = 0
   let currentToken: string | null = null
 
@@ -86,9 +100,17 @@ export async function stubApi(page: Page, options: { signedIn?: boolean } = {}):
         return
       }
       case "GET /api/me":
+        if (stub.meProblem) {
+          await route.fulfill(problemBody(401, stub.meProblem))
+          return
+        }
         await route.fulfill(
           stub.signedIn
-            ? { status: 200, contentType: "application/json", body: JSON.stringify(STUB_ME) }
+            ? {
+                status: 200,
+                contentType: "application/json",
+                body: JSON.stringify({ ...STUB_ME, sessionExpiresAt: stub.sessionExpiresAt }),
+              }
             : problemBody(401, "session_expired"),
         )
         return

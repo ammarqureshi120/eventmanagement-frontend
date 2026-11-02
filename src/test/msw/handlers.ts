@@ -13,6 +13,8 @@ export const sysAdminMe: MeResponse = {
   organization: null,
   version: 1,
   navAreas: ["platform", "account"],
+  // Far ahead, so the 12-hour limit never interferes unless a test sets its own.
+  sessionExpiresAt: "2099-01-01T00:00:00Z",
 }
 
 /** An `EventHubProblem` body (AD-17). */

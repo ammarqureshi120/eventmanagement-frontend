@@ -21,6 +21,9 @@ export type ProblemCode =
   | "server_error"
   | "network"
 
+/** The 401 codes that end a session (AD-16): idle/absolute timeout or a stamp change, and a deactivated user. */
+export type SessionEndCode = Extract<ProblemCode, "session_expired" | "account_disabled">
+
 export interface Problem {
   /** Stable error code. Unknown server codes are kept as-is (open enum); render a neutral fallback. */
   code: ProblemCode | (string & {})

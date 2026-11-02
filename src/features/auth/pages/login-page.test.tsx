@@ -9,6 +9,9 @@ import { server } from "@/test/msw/server"
 import { renderRoutes, signedInAs } from "@/test/render"
 import { Toaster } from "@/shared/ui/sonner"
 
+import { registerNetworkToast } from "@/app/network-toast"
+import { closeSessionChannelForTests, markSessionActive, wasSessionActive } from "@/shared/auth/session-timer"
+
 import { LoginPage } from "./login-page"
 
 const INVALID_CREDENTIALS =
@@ -70,13 +73,17 @@ async function submit(email: string, password: string) {
 }
 
 describe("LoginPage", () => {
+  let unregisterNetworkToast: () => void = () => undefined
   beforeEach(() => {
+    unregisterNetworkToast = registerNetworkToast()
     vi.stubGlobal(
       "matchMedia",
       vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })),
     )
   })
   afterEach(() => {
+    unregisterNetworkToast()
+    closeSessionChannelForTests()
     vi.unstubAllGlobals()
     localStorage.clear()
     document.documentElement.classList.remove("dark")
@@ -254,6 +261,8 @@ describe("LoginPage", () => {
 
     expect(await screen.findByText("You seem to be offline. Check your connection and try again.")).toBeInTheDocument()
     expect(screen.getByLabelText("Password")).toHaveValue("secret")
+    expect(screen.getByRole("textbox", { name: "Email" })).toHaveValue("sara@example.test")
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument()
   })
 
   it("shows the signed-out notice from router state once, then clears it from history state", async () => {
@@ -264,6 +273,40 @@ describe("LoginPage", () => {
     expect(`${router.state.location.pathname}${router.state.location.search}`).toBe("/login?returnTo=%2Fplatform")
     // Still shown on this visit; a reload (no state) would not show it again.
     expect(screen.getByRole("status")).toHaveTextContent("You're signed out. See you soon.")
+  })
+
+  it("shows the session-ended notice from router state, keeps returnTo, clears the flag and calls nothing", async () => {
+    markSessionActive()
+    const calls = statefulAuthApi()
+    const { router } = renderLogin({ pathname: "/login", search: "?returnTo=%2Fevents%2F7", state: { notice: "sessionEnded" } })
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Your session ended. Sign in again to continue.")
+    await waitFor(() => expect(router.state.location.state).toBeNull())
+    expect(wasSessionActive()).toBe(false)
+    // No /api/me (it could renew a session the client believes has ended) and no token refresh.
+    expect(calls).toEqual([])
+
+    // Signing in again returns to the page the user was on.
+    await submit("sara@example.test", "secret")
+    expect(await screen.findByRole("heading", { level: 1, name: "Event page" })).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe("/events/7")
+  })
+
+  it("shows the disabled notice as a warning Alert from router state", async () => {
+    renderLogin({ pathname: "/login", state: { notice: "accountDisabled" } })
+
+    const alert = await screen.findByRole("alert")
+    expect(alert).toHaveTextContent("This account is disabled.")
+    expect(alert).toHaveAttribute("data-tone", "warning")
+  })
+
+  it("ignores an unknown notice in router state", async () => {
+    signedInAs()
+    const { router } = renderLogin({ pathname: "/login", state: { notice: "pwned" } })
+
+    // Treated as a normal visit: a signed-in user is sent home.
+    expect(await screen.findByRole("heading", { level: 1, name: "Platform overview" })).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe("/platform")
   })
 
   it("shows the disabled-account message on account_disabled", async () => {

@@ -11,6 +11,14 @@ import { problem, sysAdminMe } from "@/test/msw/handlers"
 import { server } from "@/test/msw/server"
 import { renderRoutes, signedInAs } from "@/test/render"
 
+import {
+  closeSessionChannelForTests,
+  markSessionActive,
+  SESSION_CHANNEL_NAME,
+  wasSessionActive,
+} from "@/shared/auth/session-timer"
+
+import { registerNetworkToast } from "./network-toast"
 import { routes } from "./router"
 import { resetRouteFocusForTests } from "./shell/route-focus"
 import { registerUnauthorizedRedirect } from "./unauthorized-redirect"
@@ -25,7 +33,9 @@ const pathOf = (router: { state: { location: { pathname: string; search: string 
   `${router.state.location.pathname}${router.state.location.search}`
 
 describe("router", () => {
+  let unregisterNetworkToast: () => void = () => undefined
   beforeEach(() => {
+    unregisterNetworkToast = registerNetworkToast()
     vi.stubGlobal(
       "matchMedia",
       vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })),
@@ -33,6 +43,8 @@ describe("router", () => {
     resetRouteFocusForTests()
   })
   afterEach(() => {
+    unregisterNetworkToast()
+    closeSessionChannelForTests()
     vi.unstubAllGlobals()
     localStorage.clear()
     document.cookie = "XSRF-TOKEN=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/"
@@ -96,7 +108,8 @@ describe("router", () => {
       server.use(http.get("*/api/me", () => HttpResponse.error()))
       renderAt("/platform")
 
-      expect(await screen.findByText("You seem to be offline. Check your connection and try again.")).toBeInTheDocument()
+      // Inline on the page, plus the app's single offline toast.
+      expect((await screen.findAllByText("You seem to be offline. Check your connection and try again."))[0]).toBeInTheDocument()
       expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument()
     })
 
@@ -115,6 +128,41 @@ describe("router", () => {
 
       expect(await screen.findByRole("heading", { level: 1, name: "Sign in" })).toBeInTheDocument()
       expect(pathOf(router)).toBe(`/login?returnTo=${encodeURIComponent("/platform?view=all")}`)
+      // A first visit in this browser: no confusing notice.
+      expect(screen.queryByRole("status")).not.toBeInTheDocument()
+    })
+
+    it("shows the session-ended notice when a session existed here, clears the flag and tells the other tabs", async () => {
+      markSessionActive()
+      const received: unknown[] = []
+      const other = new BroadcastChannel(SESSION_CHANNEL_NAME)
+      other.onmessage = (event: MessageEvent) => received.push(event.data)
+      try {
+        const { router } = renderAt("/platform?view=all")
+
+        expect(await screen.findByText("Your session ended. Sign in again to continue.")).toBeInTheDocument()
+        expect(pathOf(router)).toBe(`/login?returnTo=${encodeURIComponent("/platform?view=all")}`)
+        expect(wasSessionActive()).toBe(false)
+        await waitFor(() => expect(received).toContainEqual({ type: "ended", reason: "sessionEnded" }))
+      } finally {
+        other.close()
+      }
+    })
+
+    it("sends a disabled account to /login without returnTo, with the disabled notice", async () => {
+      server.use(http.get("*/api/me", () => problem(401, "account_disabled")))
+      const { router } = renderAt("/platform")
+
+      expect(await screen.findByRole("alert")).toHaveTextContent("This account is disabled.")
+      expect(pathOf(router)).toBe("/login")
+    })
+
+    it("/ shows the session-ended notice too when a session existed here", async () => {
+      markSessionActive()
+      const { router } = renderAt("/")
+
+      expect(await screen.findByText("Your session ended. Sign in again to continue.")).toBeInTheDocument()
+      expect(pathOf(router)).toBe("/login")
     })
 
     it("renders the app shell with the platform page for a signed-in System Administrator", async () => {
@@ -359,9 +407,44 @@ describe("router", () => {
 
         await waitFor(() => expect(pathOf(router)).toBe(`/login?returnTo=${encodeURIComponent("/platform")}`))
         expect(await screen.findByRole("heading", { level: 1, name: "Sign in" })).toBeInTheDocument()
+        expect(screen.getByRole("status")).toHaveTextContent("Your session ended. Sign in again to continue.")
 
         act(() => notifyUnauthorized())
         expect(pathOf(router)).toBe(`/login?returnTo=${encodeURIComponent("/platform")}`)
+      } finally {
+        unregister()
+      }
+    })
+  })
+
+  describe("session end and sign in again", () => {
+    it("an API 401 on a protected page → session-ended notice → signing in returns to the page", async () => {
+      let signedIn = true
+      server.use(
+        http.get("*/api/me", () => (signedIn ? HttpResponse.json(sysAdminMe) : problem(401, "session_expired"))),
+        http.post("*/api/auth/login", () => {
+          signedIn = true
+          return new HttpResponse(null, { status: 200 })
+        }),
+      )
+      const user = userEvent.setup()
+      const { router, store } = renderAt("/platform?view=all")
+      const unregister = registerUnauthorizedRedirect(router, store)
+      try {
+        await screen.findByRole("heading", { level: 1, name: "Platform overview" })
+
+        signedIn = false
+        act(() => notifyUnauthorized("session_expired"))
+
+        expect(await screen.findByText("Your session ended. Sign in again to continue.")).toBeInTheDocument()
+        expect(pathOf(router)).toBe(`/login?returnTo=${encodeURIComponent("/platform?view=all")}`)
+
+        await user.type(screen.getByRole("textbox", { name: "Email" }), "sara@example.test")
+        await user.type(screen.getByLabelText("Password"), "secret-1")
+        await user.click(screen.getByRole("button", { name: "Sign in" }))
+
+        expect(await screen.findByRole("heading", { level: 1, name: "Platform overview" })).toBeInTheDocument()
+        expect(pathOf(router)).toBe("/platform?view=all")
       } finally {
         unregister()
       }

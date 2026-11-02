@@ -1,10 +1,9 @@
 import { useEffect, useState } from "react"
 import { Link, Navigate, useLocation, useNavigate, useNavigation } from "react-router"
-import { toast } from "sonner"
 
 import { roleHome, useMe } from "@/shared/auth"
 import { useZodForm } from "@/shared/lib/forms"
-import { GENERIC_FAILURE_MESSAGE, OFFLINE_MESSAGE } from "@/shared/lib/messages"
+import { GENERIC_FAILURE_MESSAGE, LOGIN_NOTICE_MESSAGES, noticeFrom, type LoginNotice } from "@/shared/lib/messages"
 import { applyToForm } from "@/shared/lib/problem"
 import { useDocumentTitle } from "@/shared/lib/use-document-title"
 import { Alert } from "@/shared/ui/alert"
@@ -15,30 +14,43 @@ import { PasswordInput } from "@/shared/ui/password-input"
 
 import { AuthLayout } from "../components/auth-layout"
 import { useSignIn } from "../hooks/use-sign-in"
-import { SIGNED_OUT_NOTICE, useSignedOutCleanup } from "../hooks/use-sign-out"
+import { useLoginNoticeCleanup } from "../hooks/use-sign-out"
 import { loginSchema, type LoginFormValues } from "../schemas"
 
 /** UX-DR51 copy (epics Story 1.4). */
 const INVALID_CREDENTIALS =
   "Email or password is incorrect. Check both and try again. After 5 tries, sign-in pauses for 15 minutes."
 
-const SIGNED_OUT = "You're signed out. See you soon."
-
 /** EXPERIENCE State Patterns, "Signed out by admin": sign-in attempts show the same message. */
-const ACCOUNT_DISABLED = "This account is disabled."
+const ACCOUNT_DISABLED = LOGIN_NOTICE_MESSAGES.accountDisabled
 
 const FORM_FIELDS = ["email", "password"] as const
 
-function hasNotice(state: unknown, notice: string): boolean {
-  return typeof state === "object" && state !== null && (state as { notice?: unknown }).notice === notice
+/** The disabled notice is a warning; the other two are calm info notes. */
+function NoticeAlert({ notice }: { notice: LoginNotice }) {
+  if (notice === "accountDisabled") {
+    return (
+      <Alert tone="warning" role="alert" className="mb-5">
+        {LOGIN_NOTICE_MESSAGES.accountDisabled}
+      </Alert>
+    )
+  }
+  return (
+    <Alert tone="info" role="status" className="mb-5">
+      {LOGIN_NOTICE_MESSAGES[notice]}
+    </Alert>
+  )
 }
 
 /**
  * `/login` (FR-1, UX-DR46/51/11). Client checks first, then `POST /api/auth/login`.
  * - `invalid_credentials` → error Alert; email kept, password cleared and focused.
  * - server `validation` with field errors → messages on those fields, first one focused.
- * - anything else → generic error Alert; offline → toast. Entered data is always kept.
- * The signed-out notice comes from router state and shares the Alert slot. A signed-in user is sent home.
+ * - anything else → generic error Alert; offline → the app's single offline toast (base query).
+ * Entered data is always kept.
+ * Notices (signed out, session ended, account disabled) come from router `state.notice` and share the
+ * Alert slot. While one shows, `/api/me` is not called (a session that just ended must not be renewed).
+ * A signed-in user without a notice is sent home.
  */
 export function LoginPage() {
   useDocumentTitle("Sign in")
@@ -46,15 +58,15 @@ export function LoginPage() {
   const location = useLocation()
   const navigate = useNavigate()
   const navigation = useNavigation()
-  const { me, status } = useMe()
+  // Read the notice once, then drop it from history state so a reload neither shows it again nor
+  // re-runs the cleanup.
+  const [notice] = useState(() => noticeFrom(location.state))
+  const { me, status } = useMe({ skip: notice !== null })
   const { signIn, pending } = useSignIn()
   const [formError, setFormError] = useState<string | null>(null)
-  // Read the notice once, then drop it from history state so a reload neither shows it again nor
-  // re-runs the sign-out cleanup.
-  const [signedOutNotice] = useState(() => hasNotice(location.state, SIGNED_OUT_NOTICE))
-  useSignedOutCleanup(signedOutNotice)
+  useLoginNoticeCleanup(notice)
   useEffect(() => {
-    if (signedOutNotice) {
+    if (notice) {
       void navigate(`${location.pathname}${location.search}`, { replace: true, state: null })
     }
     // Only on mount: the notice is captured above.
@@ -70,8 +82,8 @@ export function LoginPage() {
     formState: { errors, isSubmitting },
   } = useZodForm(loginSchema, { defaultValues: { email: "", password: "" } })
 
-  // Right after sign-out the cache is cleared just after this page shows; never bounce back then.
-  if (status === "signedIn" && me && !pending && !signedOutNotice && navigation.state === "idle") {
+  // Right after sign-out or a session end the cache is cleared just after this page shows; never bounce back then.
+  if (status === "signedIn" && me && !pending && !notice && navigation.state === "idle") {
     return <Navigate to={roleHome(me.role) ?? "/"} replace />
   }
 
@@ -97,13 +109,12 @@ export function LoginPage() {
       return
     }
     if (problem.code === "network") {
-      toast.error(OFFLINE_MESSAGE)
       return
     }
     setFormError(GENERIC_FAILURE_MESSAGE)
   }
 
-  const showSignedOut = formError === null && signedOutNotice
+  const shownNotice = formError === null ? notice : null
 
   return (
     <AuthLayout>
@@ -117,11 +128,7 @@ export function LoginPage() {
           {formError}
         </Alert>
       )}
-      {showSignedOut && (
-        <Alert tone="info" role="status" className="mb-5">
-          {SIGNED_OUT}
-        </Alert>
-      )}
+      {shownNotice && <NoticeAlert notice={shownNotice} />}
 
       <form noValidate onSubmit={handleSubmit(onValid)} className="grid gap-4">
         <Field label="Email" required error={errors.email?.message}>
