@@ -336,4 +336,24 @@ test.describe("/login", () => {
         .toBe(true)
     }
   })
+
+  test("a network failure shows exactly one offline toast (app-wide handler) and keeps the data", async ({ page }) => {
+    await page.route("**/api/auth/login", (route) => route.abort())
+    await page.goto("/login")
+    await expect(page.getByRole("heading", { level: 1, name: "Sign in" })).toBeVisible()
+
+    await page.getByRole("textbox", { name: "Email" }).fill("sara@example.test")
+    await page.getByLabel("Password", { exact: true }).fill("secret-1")
+    const submit = page.getByRole("button", { name: "Sign in" })
+    await submit.click()
+    const offline = page.getByText("You seem to be offline. Check your connection and try again.")
+    await expect(offline).toHaveCount(1)
+    // A second failure updates the same toast instead of stacking another.
+    await expect(submit).not.toHaveAttribute("aria-busy")
+    await submit.click()
+    await expect.poll(async () => (await page.locator("[data-sonner-toast]").count())).toBe(1)
+    await expect(offline).toHaveCount(1)
+    await expect(page.getByRole("textbox", { name: "Email" })).toHaveValue("sara@example.test")
+    await expect(page.getByLabel("Password", { exact: true })).toHaveValue("secret-1")
+  })
 })

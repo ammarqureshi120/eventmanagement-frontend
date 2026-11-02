@@ -57,4 +57,17 @@ describe("useMe", () => {
     await waitFor(() => expect(result.current.status).toBe("error"))
     expect(result.current.problemCode).toBe(code)
   })
+
+  it("stays signedIn with the last user when a refresh fails offline", async () => {
+    server.use(http.get("*/api/me", () => HttpResponse.json(sysAdminMe)))
+    const { result } = renderUseMe()
+    await waitFor(() => expect(result.current.status).toBe("signedIn"))
+
+    server.use(http.get("*/api/me", () => HttpResponse.error()))
+    result.current.refetch()
+
+    await waitFor(() => expect(result.current.problemCode).toBe("network"))
+    expect(result.current.status).toBe("signedIn")
+    expect(result.current.me).toEqual(sysAdminMe)
+  })
 })

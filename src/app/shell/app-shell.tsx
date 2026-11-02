@@ -7,6 +7,7 @@ import { Button } from "@/shared/ui/button"
 import { Sheet, SheetClose, SheetContent, SheetTitle } from "@/shared/ui/sheet"
 
 import { AppLoading } from "../routes/app-loading"
+import { IdleWarning } from "../session/idle-warning"
 import { focusPageHeading } from "./route-focus"
 import { SidebarNav } from "./sidebar-nav"
 import { TopBar } from "./top-bar"
@@ -16,7 +17,8 @@ const DESKTOP_QUERY = "(min-width: 1024px)"
 /**
  * Signed-in app shell (UX-DR7/8/9/53/54): skip link first, fixed 264px sidebar at ≥1024px, an
  * off-canvas drawer (304px, max 86vw) below that, the sticky top bar and `<main id="main">` (max
- * 1240px). While the drawer is open everything behind it is `inert` (UX-DR53).
+ * 1240px). While the drawer is open everything behind it is `inert` (UX-DR53). Hosts the idle warning
+ * (Story 1.5), which portals out of the inert tree.
  * Renders `children` when given (Not found inside the shell), otherwise the route outlet.
  * Only mounted for a signed-in user (inside `RequireAuth`, or by the Not found route).
  */
@@ -139,6 +141,7 @@ export function AppShell({ children }: { children?: ReactNode }) {
         </SheetContent>
       </Sheet>
 
+      <IdleWarning me={me} />
     </div>
   )
 }

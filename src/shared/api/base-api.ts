@@ -7,8 +7,11 @@ import {
   type FetchBaseQueryError,
 } from "@reduxjs/toolkit/query/react"
 
-import { toProblem } from "@/shared/lib/problem"
+import { markSessionActive } from "@/shared/auth/session-timer"
+import { toProblem, type SessionEndCode } from "@/shared/lib/problem"
 
+import { notifySessionActivity } from "./activity"
+import { notifyNetworkError } from "./network"
 import { notifyUnauthorized } from "./unauthorized"
 import { ensureXsrfToken, readXsrfToken, refreshXsrfToken, XSRF_COOKIE, XSRF_HEADER, XsrfTokenError } from "./xsrf"
 
@@ -60,12 +63,44 @@ function tokenError(cause: unknown): { error: FetchBaseQueryError } {
   return { error: { status: "FETCH_ERROR", error: cause instanceof Error ? cause.message : String(cause) } }
 }
 
+const SESSION_END_CODES: ReadonlySet<string> = new Set<SessionEndCode>(["session_expired", "account_disabled"])
+
+function isNetworkFailure(error: FetchBaseQueryError | undefined): boolean {
+  return error?.status === "FETCH_ERROR" || error?.status === "TIMEOUT_ERROR"
+}
+
+/**
+ * Story 1.5 signals, sent once per call after any retry:
+ * - a request that never got a response → the network handler (one offline toast for the whole app);
+ * - any HTTP response except 401 (and except logout) → session activity (the server renewed the cookie);
+ * - a successful `getMe` → the "was signed in here" flag.
+ */
+function reportOutcome(
+  result: { error?: FetchBaseQueryError; meta?: { response?: Response } },
+  endpoint: string,
+): void {
+  if (isNetworkFailure(result.error)) {
+    notifyNetworkError()
+    return
+  }
+  const status = result.meta?.response?.status
+  // Logout ends the session: its response is not activity (it would close the warning mid-sign-out).
+  if (status !== undefined && status !== 401 && endpoint !== "logout") {
+    notifySessionActivity()
+  }
+  if (endpoint === "getMe" && !result.error) {
+    markSessionActive()
+  }
+}
+
 /**
  * AD-16 / AD-17 base query:
  * - sends cookies on every call;
  * - on POST/PUT/PATCH/DELETE, fetches an XSRF token first when there is no cookie, echoes it in
  *   `X-XSRF-TOKEN`, and when the antiforgery filter rejects it, refreshes the token and retries once;
- * - on 401 `session_expired` (outside login, logout and `getMe`) tells the registered unauthorized handler.
+ * - on 401 `session_expired` or `account_disabled` (outside login, logout and `getMe`) tells the registered
+ *   unauthorized handler which one it was;
+ * - reports network failures, session activity and a successful `getMe` (see `reportOutcome`).
  * Errors stay `FetchBaseQueryError`; callers map them with `toProblem` (by `code` only).
  */
 export const appBaseQuery: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> = async (
@@ -81,7 +116,9 @@ export const appBaseQuery: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQue
     try {
       await ensureXsrfToken()
     } catch (cause) {
-      return tokenError(cause)
+      const failed = tokenError(cause)
+      reportOutcome(failed, api.endpoint)
+      return failed
     }
   }
 
@@ -91,17 +128,20 @@ export const appBaseQuery: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQue
     try {
       await refreshXsrfToken()
     } catch (cause) {
-      return tokenError(cause)
+      const failed = tokenError(cause)
+      reportOutcome(failed, api.endpoint)
+      return failed
     }
     result = await rawBaseQuery(withXsrfHeader(request), api, extraOptions)
   }
 
-  if (
-    result.error?.status === 401 &&
-    !OWN_401_ENDPOINTS.has(api.endpoint) &&
-    toProblem(result.error).code === "session_expired"
-  ) {
-    notifyUnauthorized()
+  reportOutcome(result, api.endpoint)
+
+  if (result.error?.status === 401 && !OWN_401_ENDPOINTS.has(api.endpoint)) {
+    const code = toProblem(result.error).code
+    if (SESSION_END_CODES.has(code)) {
+      notifyUnauthorized(code as SessionEndCode)
+    }
   }
 
   return result

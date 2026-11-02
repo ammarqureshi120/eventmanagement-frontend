@@ -4,11 +4,14 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { createStore } from "@/app/store"
 import { generatedApi } from "@/api/generated/auth"
 import { generatedApi as meApi } from "@/api/generated/me"
-import { problem } from "@/test/msw/handlers"
+import { problem, sysAdminMe } from "@/test/msw/handlers"
 import { server } from "@/test/msw/server"
 
 import { baseApi, XSRF_HEADER } from "@/shared/api/base-api"
+import { onSessionActivity } from "@/shared/api/activity"
+import { setNetworkErrorHandler } from "@/shared/api/network"
 import { setUnauthorizedHandler } from "@/shared/api/unauthorized"
+import { wasSessionActive } from "@/shared/auth/session-timer"
 import { ensureXsrfToken, refreshXsrfToken } from "@/shared/api/xsrf"
 import { toProblem } from "@/shared/lib/problem"
 
@@ -229,6 +232,7 @@ describe("baseApi", () => {
         const result = await createStore().dispatch(probeApi.endpoints.probeGet.initiate())
 
         expect(onUnauthorized).toHaveBeenCalledTimes(1)
+        expect(onUnauthorized).toHaveBeenCalledWith("session_expired")
         expect(toProblem("error" in result ? result.error : undefined)).toMatchObject({ code: "session_expired", status: 401 })
       } finally {
         restore()
@@ -262,6 +266,105 @@ describe("baseApi", () => {
       const result = await createStore().dispatch(probeApi.endpoints.probeGet.initiate())
 
       expect(toProblem("error" in result ? result.error : undefined)).toEqual({ code: "network", status: null, traceId: null })
+    })
+
+    it("passes account_disabled to the unauthorized handler; other 401 codes are left to the caller", async () => {
+      const onUnauthorized = vi.fn()
+      const restore = setUnauthorizedHandler(onUnauthorized)
+      try {
+        server.use(http.get("*/api/probe", () => problem(401, "account_disabled")))
+        await createStore().dispatch(probeApi.endpoints.probeGet.initiate())
+        expect(onUnauthorized).toHaveBeenCalledWith("account_disabled")
+
+        onUnauthorized.mockClear()
+        server.use(http.get("*/api/probe", () => problem(401, "something_else")))
+        await createStore().dispatch(probeApi.endpoints.probeGet.initiate())
+        expect(onUnauthorized).not.toHaveBeenCalled()
+      } finally {
+        restore()
+      }
+    })
+
+    it("reports a network failure to the network handler once per call (also for a failed token request)", async () => {
+      const onNetwork = vi.fn()
+      const restore = setNetworkErrorHandler(onNetwork)
+      try {
+        server.use(http.get("*/api/probe", () => HttpResponse.error()))
+        await createStore().dispatch(probeApi.endpoints.probeGet.initiate())
+        expect(onNetwork).toHaveBeenCalledTimes(1)
+
+        server.use(http.get("*/api/auth/antiforgery", () => HttpResponse.error()))
+        await createStore().dispatch(probeApi.endpoints.probeSend.initiate("POST"))
+        expect(onNetwork).toHaveBeenCalledTimes(2)
+
+        server.use(http.get("*/api/probe", () => problem(500, "server_error")))
+        await createStore().dispatch(probeApi.endpoints.probeGet.initiate())
+        expect(onNetwork).toHaveBeenCalledTimes(2)
+      } finally {
+        restore()
+      }
+    })
+  })
+
+  describe("session activity", () => {
+    afterEach(() => {
+      localStorage.clear()
+    })
+
+    it.each([
+      ["200", () => HttpResponse.json({ ok: true })],
+      ["403", () => problem(403, "forbidden")],
+      ["404", () => problem(404, "not_found")],
+      ["500", () => problem(500, "server_error")],
+      ["non-JSON 502", () => new HttpResponse("bad gateway", { status: 502 })],
+    ])("counts a %s response as activity", async (_label, respond) => {
+      const onActivity = vi.fn()
+      const unsubscribe = onSessionActivity(onActivity)
+      try {
+        server.use(http.get("*/api/probe", respond))
+        await createStore().dispatch(probeApi.endpoints.probeGet.initiate())
+        expect(onActivity).toHaveBeenCalledTimes(1)
+      } finally {
+        unsubscribe()
+      }
+    })
+
+    it.each([
+      ["a 401", () => problem(401, "session_expired")],
+      ["a non-JSON 401", () => new HttpResponse("nope", { status: 401 })],
+      ["a network failure", () => HttpResponse.error()],
+    ])("does not count %s as activity", async (_label, respond) => {
+      const onActivity = vi.fn()
+      const unsubscribe = onSessionActivity(onActivity)
+      try {
+        server.use(http.get("*/api/probe", respond))
+        await createStore().dispatch(probeApi.endpoints.probeGet.initiate())
+        expect(onActivity).not.toHaveBeenCalled()
+      } finally {
+        unsubscribe()
+      }
+    })
+
+    it("does not count the logout response as activity (it ends the session)", async () => {
+      const onActivity = vi.fn()
+      const unsubscribe = onSessionActivity(onActivity)
+      try {
+        document.cookie = "XSRF-TOKEN=abc; path=/"
+        await createStore().dispatch(generatedApi.endpoints.logout.initiate())
+        expect(onActivity).not.toHaveBeenCalled()
+      } finally {
+        unsubscribe()
+      }
+    })
+
+    it("sets the 'was signed in here' flag on a successful getMe only", async () => {
+      server.use(http.get("*/api/me", () => problem(401, "session_expired")))
+      await createStore().dispatch(meApi.endpoints.getMe.initiate())
+      expect(wasSessionActive()).toBe(false)
+
+      server.use(http.get("*/api/me", () => HttpResponse.json(sysAdminMe)))
+      await createStore().dispatch(meApi.endpoints.getMe.initiate())
+      expect(wasSessionActive()).toBe(true)
     })
   })
 })

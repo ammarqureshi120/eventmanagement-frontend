@@ -33,5 +33,6 @@ export type MeResponse = {
   organization: (null | null) | MeOrganization;
   version: number;
   navAreas: NavArea[];
+  sessionExpiresAt: string;
 };
 export const { useGetMeQuery, useLazyGetMeQuery } = injectedRtkApi;

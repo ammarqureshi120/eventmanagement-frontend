@@ -29,15 +29,19 @@ function isSignedOutError(error: unknown): boolean {
 /**
  * The signed-in user from `GET /api/me` (AD-9). Signed-in, role and nav areas are derived from this
  * query only, never stored in a slice (AD-2). `signedOut` means the API answered 401 (or `account_disabled`).
+ * `skip` sends nothing and reports `loading` (used where a request could renew a session that ended).
  */
-export function useMe(): UseMeResult {
-  const { data, error, isLoading, isFetching, refetch } = useGetMeQuery()
+export function useMe(options: { skip?: boolean } = {}): UseMeResult {
+  const { data, error, isLoading, isFetching, refetch } = useGetMeQuery(undefined, { skip: options.skip })
 
   let status: MeStatus
-  if (error) {
-    status = isSignedOutError(error) ? "signedOut" : "error"
+  if (error && isSignedOutError(error)) {
+    status = "signedOut"
   } else if (data) {
+    // A failed refresh (offline, 5xx) of a known user keeps them signed in; the offline toast tells them.
     status = "signedIn"
+  } else if (error) {
+    status = "error"
   } else {
     status = "loading"
   }
