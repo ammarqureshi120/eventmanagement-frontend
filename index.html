@@ -3,6 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- AD-16 (Story 1.6b): never send a Referer, so a reset or invite token can't leak (one document, so app-wide). -->
+    <meta name="referrer" content="no-referrer" />
     <!-- AD-23 / UX-DR4: no-flash theme. Runs before any stylesheet; same rules as src/shared/theme/theme-storage.ts.
          Its SHA-256 is emitted to dist/csp-hashes.json at build time (build/theme-csp-plugin.ts). Keep it inline and import-free. -->
     <script>

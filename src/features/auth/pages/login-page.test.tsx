@@ -292,6 +292,37 @@ describe("LoginPage", () => {
     expect(router.state.location.pathname).toBe("/events/7")
   })
 
+  it("after a password reset: info notice, email prefilled, password empty, no /api/me, fresh XSRF token", async () => {
+    markSessionActive()
+    const calls = statefulAuthApi()
+    const { router } = renderLogin({
+      pathname: "/login",
+      state: { notice: "passwordUpdated", email: "sara@example.test" },
+    })
+
+    const notice = await screen.findByRole("status")
+    expect(notice).toHaveTextContent("Password updated. Sign in with your new password.")
+    expect(notice).toHaveAttribute("data-tone", "info")
+    expect(screen.getByRole("textbox", { name: "Email" })).toHaveValue("sara@example.test")
+    expect(screen.getByLabelText("Password")).toHaveValue("")
+    await waitFor(() => expect(router.state.location.state).toBeNull())
+    expect(wasSessionActive()).toBe(false)
+    // The reset rotated the stamp: the old XSRF token is replaced, and /api/me is not asked.
+    await waitFor(() => expect(calls).toEqual(["GET /api/auth/antiforgery"]))
+
+    const user = userEvent.setup()
+    await user.type(screen.getByLabelText("Password"), "secret")
+    await user.click(screen.getByRole("button", { name: "Sign in" }))
+    expect(await screen.findByRole("heading", { level: 1, name: "Platform overview" })).toBeInTheDocument()
+  })
+
+  it("ignores a prefill email that is not a usable string", async () => {
+    renderLogin({ pathname: "/login", state: { notice: "passwordUpdated", email: { evil: true } } })
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Password updated. Sign in with your new password.")
+    expect(screen.getByRole("textbox", { name: "Email" })).toHaveValue("")
+  })
+
   it("shows the disabled notice as a warning Alert from router state", async () => {
     renderLogin({ pathname: "/login", state: { notice: "accountDisabled" } })
 
