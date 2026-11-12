@@ -27,7 +27,7 @@ export function problem(status: number, code: string, errors?: Record<string, st
 
 /**
  * Default handlers shared by all tests: signed out (`/api/me` → 401), antiforgery issues a token,
- * login, logout, forgot and reset password succeed. Tests override per case with `server.use(...)`.
+ * login, logout, forgot and reset password succeed, and the My account writes (profile, change password) answer 204. Tests override per case with `server.use(...)`.
  * Feature handlers (`features/<f>/mocks.ts`) are appended here.
  */
 export const handlers: RequestHandler[] = [
@@ -41,4 +41,7 @@ export const handlers: RequestHandler[] = [
   // Story 1.6: forgot always answers 202 with no body; reset answers 200 with the account's email.
   http.post("*/api/auth/forgot-password", () => new HttpResponse(null, { status: 202 })),
   http.post("*/api/auth/reset-password", () => HttpResponse.json({ email: sysAdminMe.email })),
+  // Story 1.7: both My account writes answer 204 with no body.
+  http.put("*/api/me/profile", () => new HttpResponse(null, { status: 204 })),
+  http.post("*/api/me/change-password", () => new HttpResponse(null, { status: 204 })),
 ]

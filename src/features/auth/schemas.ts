@@ -1,5 +1,6 @@
 import { z } from "zod"
 
+import { confirmProblem } from "@/shared/lib/password-confirm"
 import { passwordProblems } from "@/shared/lib/password-policy"
 
 /**
@@ -28,9 +29,6 @@ export const forgotPasswordSchema = z.object({
 export type ForgotPasswordFormInput = z.input<typeof forgotPasswordSchema>
 export type ForgotPasswordFormValues = z.output<typeof forgotPasswordSchema>
 
-/** UX-DR25 copy for a Confirm field that differs from the password above. */
-export const PASSWORD_MISMATCH = "This doesn't match the password above. Type it again."
-
 /**
  * `/reset-password` (Story 1.6b): the shared password policy (first broken rule, the server's message) on
  * `newPassword`, and Confirm must match it. Both checks run in one object refinement so the mismatch shows even
@@ -46,8 +44,9 @@ export const resetPasswordSchema = z
     if (firstProblem) {
       ctx.addIssue({ code: "custom", path: ["newPassword"], message: firstProblem })
     }
-    if (values.confirmPassword !== values.newPassword) {
-      ctx.addIssue({ code: "custom", path: ["confirmPassword"], message: PASSWORD_MISMATCH })
+    const mismatch = confirmProblem(values.newPassword, values.confirmPassword)
+    if (mismatch) {
+      ctx.addIssue({ code: "custom", path: ["confirmPassword"], message: mismatch })
     }
   })
 

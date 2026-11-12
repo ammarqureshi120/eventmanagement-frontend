@@ -82,8 +82,9 @@ test.describe("sign-in, app shell and sign-out", () => {
       await expect(sidebar.getByText("EventHub platform")).toBeVisible()
       await expect(sidebar.getByText("Account", { exact: true })).toBeVisible()
       await expect(sidebar.getByRole("button", { name: "Sign out" })).toBeVisible()
+      await expect(sidebar.getByRole("group", { name: "Account" }).getByRole("link", { name: "My account" })).toBeVisible()
       await expect(sidebar.getByRole("radio", { name: "System" })).toBeVisible()
-      await expect(sidebar.getByText(/My account|Organizations/)).toHaveCount(0)
+      await expect(sidebar.getByText(/Organizations/)).toHaveCount(0)
       return
     }
 
@@ -103,7 +104,8 @@ test.describe("sign-in, app shell and sign-out", () => {
     await expect(drawer.getByRole("button", { name: "Close menu" })).toBeVisible()
     await expect(drawer.getByRole("button", { name: "Sign out" })).toBeInViewport()
     await expect(drawer.getByRole("radio", { name: "Dark" })).toBeInViewport()
-    await expect(drawer.getByText(/My account|Organizations/)).toHaveCount(0)
+    await expect(drawer.getByRole("link", { name: "My account" })).toBeInViewport()
+    await expect(drawer.getByText(/Organizations/)).toHaveCount(0)
     // Main content is inert behind the drawer.
     expect(await page.locator("main").evaluate((el) => el.closest("[inert]") !== null)).toBe(true)
     expect(await smallTargets(page)).toEqual([])
@@ -159,8 +161,8 @@ test.describe("sign-in, app shell and sign-out", () => {
     await expect(menu).toBeVisible()
     await expect(menu.getByText("Sara Admin")).toBeVisible()
     await expect(menu.getByText("System Administrator")).toBeVisible()
-    await expect(menu.getByRole("menuitem")).toHaveText(["Sign out"])
-    await expect(menu.getByRole("menuitem", { name: "Sign out" })).toBeFocused()
+    await expect(menu.getByRole("menuitem")).toHaveText(["My account", "Sign out"])
+    await expect(menu.getByRole("menuitem", { name: "My account" })).toBeFocused()
     expect(await smallTargets(page)).toEqual([])
     expect(await outsideViewport(page, "[role=menu]")).toEqual([])
     await expectNoSeriousA11yViolations(page)

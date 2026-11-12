@@ -1,4 +1,4 @@
-import { LogOutIcon, TicketIcon } from "lucide-react"
+import { LogOutIcon, TicketIcon, UserRoundIcon } from "lucide-react"
 import { useId, type ReactNode } from "react"
 import { NavLink } from "react-router"
 
@@ -26,8 +26,8 @@ interface SidebarNavProps {
 
 /**
  * Sidebar content (DESIGN Sidebar, UX-DR7/8/9): brand, org chip, main nav from `/api/me` nav areas,
- * the ACCOUNT group with "Sign out" (My account arrives with Story 1.7) and the labelled theme toggle
- * at the foot. Used by the desktop sidebar and the phone/tablet drawer.
+ * the ACCOUNT group ("My account" when the `account` nav area is listed, then "Sign out") and the labelled
+ * theme toggle at the foot. Used by the desktop sidebar and the phone/tablet drawer (links close the drawer).
  */
 export function SidebarNav({ me, onNavigate, brandEnd, className }: SidebarNavProps) {
   const { signOut, pending } = useSignOut()
@@ -77,6 +77,12 @@ export function SidebarNav({ me, onNavigate, brandEnd, className }: SidebarNavPr
         <p id={accountLabelId} className="px-3 pb-1 text-nav-label font-bold text-muted-foreground uppercase">
           Account
         </p>
+        {me.navAreas.includes("account") && (
+          <NavLink to="/profile" end className={NAV_ITEM} onClick={onNavigate}>
+            <UserRoundIcon aria-hidden="true" />
+            <span className="min-w-0">My account</span>
+          </NavLink>
+        )}
         <button
           type="button"
           className={cn(NAV_ITEM, "cursor-pointer aria-busy:cursor-progress")}
