@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react"
+import { useCallback, useEffect, useId, useRef, useState } from "react"
 import { useWatch } from "react-hook-form"
 import { Link, useLocation, useNavigate } from "react-router"
 import { Link2OffIcon } from "lucide-react"
@@ -6,7 +6,7 @@ import { Link2OffIcon } from "lucide-react"
 import { useResetPasswordMutation } from "@/api/generated/auth"
 import { useZodForm } from "@/shared/lib/forms"
 import { GENERIC_FAILURE_MESSAGE, type LoginNoticeState } from "@/shared/lib/messages"
-import { passwordLength } from "@/shared/lib/password-policy"
+import { useLiveConfirm } from "@/shared/lib/password-confirm"
 import { applyToForm, toProblem } from "@/shared/lib/problem"
 import { useDocumentTitle } from "@/shared/lib/use-document-title"
 import { Alert } from "@/shared/ui/alert"
@@ -80,7 +80,6 @@ export function ResetPasswordPage() {
   const [token, setToken] = useState<string | null>(() => tokenFrom(location.search))
   const [linkRejected, setLinkRejected] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
-  const [confirmLive, setConfirmLive] = useState(false)
   const [resetPassword, { reset: forgetMutation }] = useResetPasswordMutation()
 
   useDocumentTitle(token ? "Set a new password" : "Reset link expired")
@@ -110,17 +109,8 @@ export function ResetPasswordPage() {
   const [newPassword, confirmPassword] = useWatch({ control, name: ["newPassword", "confirmPassword"] })
 
   // Confirm starts validating once it is as long as the first field, then stays live (UX-DR25).
-  // Counted in code points, as the policy counts length.
-  const confirmLength = passwordLength(confirmPassword)
-  const confirmReady = confirmLength > 0 && confirmLength >= passwordLength(newPassword)
-  if (confirmReady && !confirmLive) {
-    setConfirmLive(true)
-  }
-  useEffect(() => {
-    if (confirmLive) {
-      void trigger("confirmPassword")
-    }
-  }, [confirmLive, newPassword, confirmPassword, trigger])
+  const validateConfirm = useCallback(() => void trigger("confirmPassword"), [trigger])
+  useLiveConfirm(newPassword, confirmPassword, validateConfirm)
 
   if (token === null) {
     return (

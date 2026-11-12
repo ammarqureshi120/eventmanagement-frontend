@@ -110,7 +110,8 @@ describe("router", () => {
 
       // Inline on the page, plus the app's single offline toast.
       expect((await screen.findAllByText("You seem to be offline. Check your connection and try again."))[0]).toBeInTheDocument()
-      expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument()
+      // The toast can land before the inline error renders: wait for the page itself.
+      expect(await screen.findByRole("button", { name: "Try again" })).toBeInTheDocument()
     })
 
     it("Not found shows the session error with Try again when /api/me fails", async () => {
@@ -177,8 +178,12 @@ describe("router", () => {
       const nav = screen.getAllByRole("navigation", { name: "Main navigation" })[0]
       expect(within(nav).getByRole("link", { name: "Platform overview" })).toHaveAttribute("aria-current", "page")
       expect(within(nav).getAllByRole("link")).toHaveLength(1)
-      expect(screen.queryByRole("link", { name: /My account|Organizations/ })).not.toBeInTheDocument()
-      expect(screen.getAllByRole("group", { name: "Account" })[0]).toHaveTextContent("Sign out")
+      expect(screen.queryByRole("link", { name: /Organizations/ })).not.toBeInTheDocument()
+      // The Account group: My account (not in the main nav), then Sign out.
+      expect(within(nav).queryByRole("link", { name: "My account" })).not.toBeInTheDocument()
+      const accountGroup = screen.getAllByRole("group", { name: "Account" })[0]
+      expect(accountGroup).toHaveTextContent(/^AccountMy accountSign out$/)
+      expect(within(accountGroup).getByRole("link", { name: "My account" })).toHaveAttribute("href", "/profile")
       expect(screen.getAllByText("EventHub platform").length).toBeGreaterThan(0)
       expect(screen.getAllByRole("radiogroup", { name: "Theme" }).length).toBeGreaterThanOrEqual(2)
       expect(screen.getByRole("button", { name: /Sara Admin System Administrator/ })).toBeInTheDocument()
@@ -271,7 +276,7 @@ describe("router", () => {
       await user.click(await screen.findByRole("button", { name: /Sara Admin/ }))
       const menu = await screen.findByRole("menu")
       expect(within(menu).getByText("System Administrator")).toBeInTheDocument()
-      expect(within(menu).queryByText("My account")).not.toBeInTheDocument()
+      expect(within(menu).getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["My account", "Sign out"])
       await user.click(within(menu).getByRole("menuitem", { name: "Sign out" }))
 
       expect(await screen.findByText("You're signed out. See you soon.")).toBeInTheDocument()
@@ -391,6 +396,81 @@ describe("router", () => {
       await user.click(within(drawer).getByRole("link", { name: "Platform overview" }))
 
       await waitFor(() => expect(screen.queryByRole("dialog", { name: "Menu" })).not.toBeInTheDocument())
+    })
+  })
+
+  describe("My account (/profile)", () => {
+    it("opens from the sidebar Account group with the H1 focused", async () => {
+      signedInAs()
+      const user = userEvent.setup()
+      const { router } = renderAt("/platform")
+      await screen.findByRole("heading", { level: 1, name: "Platform overview" })
+
+      const accountGroup = screen.getAllByRole("group", { name: "Account" })[0]
+      await user.click(within(accountGroup).getByRole("link", { name: "My account" }))
+
+      const heading = await screen.findByRole("heading", { level: 1, name: "My account" })
+      expect(pathOf(router)).toBe("/profile")
+      await waitFor(() => expect(heading).toHaveFocus())
+      expect(document.title).toBe("My account · EventHub")
+      expect(within(screen.getAllByRole("group", { name: "Account" })[0]).getByRole("link", { name: "My account" })).toHaveAttribute(
+        "aria-current",
+        "page",
+      )
+    })
+
+    it("opens from the user menu", async () => {
+      signedInAs()
+      const user = userEvent.setup()
+      const { router } = renderAt("/platform")
+
+      await user.click(await screen.findByRole("button", { name: /Sara Admin/ }))
+      await user.click(within(await screen.findByRole("menu")).getByRole("menuitem", { name: "My account" }))
+
+      expect(await screen.findByRole("heading", { level: 1, name: "My account" })).toBeInTheDocument()
+      expect(pathOf(router)).toBe("/profile")
+    })
+
+    it("closes the drawer when My account is chosen there", async () => {
+      signedInAs()
+      const user = userEvent.setup()
+      renderAt("/platform")
+
+      await user.click(await screen.findByRole("button", { name: "Open menu" }))
+      const drawer = await screen.findByRole("dialog", { name: "Menu" })
+      await user.click(within(drawer).getByRole("link", { name: "My account" }))
+
+      expect(await screen.findByRole("heading", { level: 1, name: "My account" })).toBeInTheDocument()
+      await waitFor(() => expect(screen.queryByRole("dialog", { name: "Menu" })).not.toBeInTheDocument())
+    })
+
+    it("a saved name shows in the user button straight away (Me invalidated)", async () => {
+      let me = { ...sysAdminMe }
+      server.use(
+        http.get("*/api/me", () => HttpResponse.json(me)),
+        http.put("*/api/me/profile", async ({ request }) => {
+          const body = (await request.json()) as { firstName: string; lastName: string; phone: string | null }
+          me = { ...me, ...body, version: me.version + 1 }
+          return new HttpResponse(null, { status: 204 })
+        }),
+      )
+      const user = userEvent.setup()
+      renderAt("/profile")
+
+      const firstName = await screen.findByRole("textbox", { name: "First name" })
+      await user.clear(firstName)
+      await user.type(firstName, "Sarah")
+      await user.click(screen.getByRole("button", { name: "Save changes" }))
+
+      expect(await screen.findByRole("button", { name: /Sarah Admin System Administrator/ })).toBeInTheDocument()
+    })
+
+    it("shows No access when the account area is not listed", async () => {
+      signedInAs({ ...sysAdminMe, navAreas: ["platform"] })
+      renderAt("/profile")
+
+      expect(await screen.findByRole("heading", { level: 1, name: "No access" })).toBeInTheDocument()
+      expect(screen.queryByRole("link", { name: "My account" })).not.toBeInTheDocument()
     })
   })
 

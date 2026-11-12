@@ -47,7 +47,8 @@ export async function smallTargets(page: Page) {
       .filter((el) => !el.classList.contains("sr-only"))
       .map((el) => ({ el, box: el.getBoundingClientRect() }))
       .filter(({ box }) => box.width > 0 && box.height > 0)
-      .filter(({ box }) => box.width < 44 || box.height < 44)
+      // A tiny epsilon: a fractional translate (menus sliding in) can report 43.99999px for a 44px box.
+      .filter(({ box }) => box.width < 44 - 0.01 || box.height < 44 - 0.01)
       .map(
         ({ el, box }) =>
           `${el.tagName.toLowerCase()} "${el.getAttribute("aria-label") ?? el.textContent?.trim()}" ${Math.round(box.width)}x${Math.round(box.height)}`,

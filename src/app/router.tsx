@@ -1,5 +1,7 @@
 import { createBrowserRouter, type RouteObject } from "react-router"
 
+import { loadProfilePage } from "@/features/account"
+
 import { RequireArea } from "./routes/require-area"
 import { REQUIRES_AUTH_HANDLE, RequireAuth } from "./routes/require-auth"
 import { RootLayout } from "./routes/root-layout"
@@ -13,7 +15,8 @@ import { RoleHomeRedirect } from "./routes/role-home-redirect"
  *
  * - `/` → the role home (or `/login` when signed out).
  * - Public auth pages (`/login`, `/forgot-password`, `/reset-password`) render signed in or out.
- * - Protected routes: `RequireAuth` (→ `/login?returnTo=`) → `AppShell` → `RequireArea` → page.
+ * - Protected routes: `RequireAuth` (→ `/login?returnTo=`) → `AppShell` → `RequireArea` → page
+ *   (`/platform` in the platform area, `/profile` My account in the account area).
  * - `*` → Not found, inside the shell when signed in and standalone otherwise.
  */
 export const routes: RouteObject[] = [
@@ -48,6 +51,15 @@ export const routes: RouteObject[] = [
                   {
                     path: "/platform",
                     lazy: async () => ({ Component: (await import("@/features/platform")).PlatformOverviewPage }),
+                  },
+                ],
+              },
+              {
+                element: <RequireArea area="account" />,
+                children: [
+                  {
+                    path: "/profile",
+                    lazy: async () => ({ Component: await loadProfilePage() }),
                   },
                 ],
               },
