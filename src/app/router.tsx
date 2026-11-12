@@ -12,6 +12,7 @@ import { RoleHomeRedirect } from "./routes/role-home-redirect"
  * owns the error boundary, so a failed chunk load or render error shows a calm fallback.
  *
  * - `/` → the role home (or `/login` when signed out).
+ * - Public auth pages (`/login`, `/forgot-password`, `/reset-password`) render signed in or out.
  * - Protected routes: `RequireAuth` (→ `/login?returnTo=`) → `AppShell` → `RequireArea` → page.
  * - `*` → Not found, inside the shell when signed in and standalone otherwise.
  */
@@ -24,6 +25,14 @@ export const routes: RouteObject[] = [
       {
         path: "/login",
         lazy: async () => ({ Component: (await import("@/features/auth")).LoginPage }),
+      },
+      {
+        path: "/forgot-password",
+        lazy: async () => ({ Component: (await import("@/features/auth")).ForgotPasswordPage }),
+      },
+      {
+        path: "/reset-password",
+        lazy: async () => ({ Component: (await import("@/features/auth")).ResetPasswordPage }),
       },
       {
         id: "protected",

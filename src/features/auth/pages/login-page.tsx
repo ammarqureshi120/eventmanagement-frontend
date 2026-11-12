@@ -26,7 +26,7 @@ const ACCOUNT_DISABLED = LOGIN_NOTICE_MESSAGES.accountDisabled
 
 const FORM_FIELDS = ["email", "password"] as const
 
-/** The disabled notice is a warning; the other two are calm info notes. */
+/** The disabled notice is a warning; the others are calm info notes. */
 function NoticeAlert({ notice }: { notice: LoginNotice }) {
   if (notice === "accountDisabled") {
     return (
@@ -48,8 +48,9 @@ function NoticeAlert({ notice }: { notice: LoginNotice }) {
  * - server `validation` with field errors → messages on those fields, first one focused.
  * - anything else → generic error Alert; offline → the app's single offline toast (base query).
  * Entered data is always kept.
- * Notices (signed out, session ended, account disabled) come from router `state.notice` and share the
- * Alert slot. While one shows, `/api/me` is not called (a session that just ended must not be renewed).
+ * Notices (signed out, session ended, account disabled, password updated) come from router `state.notice`
+ * and share the Alert slot. While one shows, `/api/me` is not called (a session that just ended must not be
+ * renewed). After a password reset, router `state.email` prefills the Email field (Story 1.6b).
  * A signed-in user without a notice is sent home.
  */
 export function LoginPage() {
@@ -60,7 +61,8 @@ export function LoginPage() {
   const navigation = useNavigation()
   // Read the notice once, then drop it from history state so a reload neither shows it again nor
   // re-runs the cleanup.
-  const [notice] = useState(() => noticeFrom(location.state))
+  const [noticeState] = useState(() => noticeFrom(location.state))
+  const notice = noticeState?.notice ?? null
   const { me, status } = useMe({ skip: notice !== null })
   const { signIn, pending } = useSignIn()
   const [formError, setFormError] = useState<string | null>(null)
@@ -80,7 +82,7 @@ export function LoginPage() {
     resetField,
     setFocus,
     formState: { errors, isSubmitting },
-  } = useZodForm(loginSchema, { defaultValues: { email: "", password: "" } })
+  } = useZodForm(loginSchema, { defaultValues: { email: noticeState?.email ?? "", password: "" } })
 
   // Right after sign-out or a session end the cache is cleared just after this page shows; never bounce back then.
   if (status === "signedIn" && me && !pending && !notice && navigation.state === "idle") {

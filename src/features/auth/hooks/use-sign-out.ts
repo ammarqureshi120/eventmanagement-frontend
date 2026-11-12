@@ -13,6 +13,12 @@ import { toProblem } from "@/shared/lib/problem"
 /** Router `state.notice` value that makes `/login` show "You're signed out. See you soon." */
 export const SIGNED_OUT_NOTICE = "signedOut" satisfies LoginNotice
 
+/** Router `state.notice` value that makes `/login` show "Password updated. Sign in with your new password." */
+export const PASSWORD_UPDATED_NOTICE = "passwordUpdated" satisfies LoginNotice
+
+/** Notices after which the old XSRF token (bound to the old user or session) is replaced. */
+const REFRESH_XSRF_NOTICES: ReadonlySet<LoginNotice> = new Set([SIGNED_OUT_NOTICE, PASSWORD_UPDATED_NOTICE])
+
 const SIGN_OUT_FAILED = "We couldn't sign you out. Try again."
 
 /** Shares the logout mutation's state between every Sign out control (user menu, sidebar, drawer). */
@@ -64,9 +70,10 @@ export function useSignOut() {
 
 /**
  * Second half of leaving a session, run by `/login` while it shows a notice: clear the RTK Query cache
- * (the old `/api/me` included) and the "was signed in here" flag. After a sign-out it also fetches a
- * fresh XSRF token (the old one was bound to the user). After a session end it calls nothing: any
- * request could renew a session the client only believes has ended. Running it here, after the
+ * (the old `/api/me` included) and the "was signed in here" flag. After a sign-out or a password reset
+ * (which rotated the stamp, ending every session of that account) it also fetches a fresh XSRF token (the
+ * old one was bound to the user). After a session end it calls nothing: any request could renew a session
+ * the client only believes has ended. Running it here, after the
  * protected screens are gone, keeps their guards from reacting to it.
  */
 export function useLoginNoticeCleanup(notice: LoginNotice | null) {
@@ -78,7 +85,7 @@ export function useLoginNoticeCleanup(notice: LoginNotice | null) {
     }
     dispatch(baseApi.util.resetApiState())
     clearSessionActive()
-    if (notice === SIGNED_OUT_NOTICE) {
+    if (REFRESH_XSRF_NOTICES.has(notice)) {
       void refreshXsrfToken().catch(() => undefined)
     }
   }, [notice, dispatch])

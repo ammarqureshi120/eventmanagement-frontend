@@ -27,7 +27,7 @@ export function problem(status: number, code: string, errors?: Record<string, st
 
 /**
  * Default handlers shared by all tests: signed out (`/api/me` → 401), antiforgery issues a token,
- * login and logout succeed. Tests override per case with `server.use(...)`.
+ * login, logout, forgot and reset password succeed. Tests override per case with `server.use(...)`.
  * Feature handlers (`features/<f>/mocks.ts`) are appended here.
  */
 export const handlers: RequestHandler[] = [
@@ -38,4 +38,7 @@ export const handlers: RequestHandler[] = [
   http.get("*/api/me", () => problem(401, "session_expired")),
   http.post("*/api/auth/login", () => new HttpResponse(null, { status: 200 })),
   http.post("*/api/auth/logout", () => new HttpResponse(null, { status: 204 })),
+  // Story 1.6: forgot always answers 202 with no body; reset answers 200 with the account's email.
+  http.post("*/api/auth/forgot-password", () => new HttpResponse(null, { status: 202 })),
+  http.post("*/api/auth/reset-password", () => HttpResponse.json({ email: sysAdminMe.email })),
 ]
